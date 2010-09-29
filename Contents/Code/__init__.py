@@ -5,20 +5,14 @@
 # v0.2 (April 18, 2010)
 # http://wiki.plexapp.com/index.php/Adobe_TV
 #
-###################################################################################################
 
-from PMS import *
-from PMS.Objects import *
-from PMS.Shortcuts import *
-import pyamf, re
-from pyamf.remoting.client import RemotingService
+import re
 
 ###################################################################################################
 
 PLUGIN_TITLE               = 'Adobe TV'
 PLUGIN_PREFIX              = '/video/adobetv'
 BASE_URL                   = 'http://tv.adobe.com'
-RTMP_PLAYER                = 'http://www.plexapp.com/player/player.php?url=%s&clip=%s'
 
 # Default artwork and icon(s)
 PLUGIN_ARTWORK             = 'art-default.png'
@@ -42,8 +36,8 @@ def Start():
   WebVideoItem.thumb = R(PLUGIN_ICON_DEFAULT)
 
   # Set HTTP headers
-  HTTP.SetCacheTime(CACHE_1WEEK)
-  HTTP.SetHeader('User-agent', 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2) Gecko/20100115 Firefox/3.6')
+  HTTP.CacheTime = CACHE_1WEEK
+  HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2) Gecko/20100115 Firefox/3.6'
 
 ###################################################################################################
 
@@ -60,12 +54,12 @@ def Products(sender):
 
   url = BASE_URL + '/products/'
   xp = '/html/body//div[@id="products"]//li/a'
-  products = XML.ElementFromURL(url, isHTML=True, errors='ignore').xpath(xp)
+  products = HTML.ElementFromURL(url, errors='ignore').xpath(xp)
 
   for p in products:
     url = BASE_URL + p.get('href')
     xp = '/html/body//div[@class="masthead"]'
-    details = XML.ElementFromURL(url, isHTML=True, errors='ignore').xpath(xp)[0]
+    details = HTML.ElementFromURL(url, errors='ignore').xpath(xp)[0]
 
     title = details.xpath('./h1')[0].text.replace('Adobe','').strip()
     summary = details.xpath('./h2')[0].text
@@ -81,7 +75,7 @@ def Channels(sender):
 
   url = BASE_URL + '/channels/'
   xp = '/html/body//div[@id="channels"]//div[@class="channel"]'
-  channels = XML.ElementFromURL(url, isHTML=True, errors='ignore').xpath(xp)
+  channels = HTML.ElementFromURL(url, errors='ignore').xpath(xp)
   i = 0
 
   for c in channels:
@@ -98,7 +92,7 @@ def SubChannels(sender, i):
 
   url = BASE_URL + '/channels/'
   xp = '/html/body//div[@id="channels"]//div[@class="channel"]'
-  channels = XML.ElementFromURL(url, isHTML=True, errors='ignore').xpath(xp)
+  channels = HTML.ElementFromURL(url, errors='ignore').xpath(xp)
 
   # 'Main' item
   title = channels[i].xpath('./h3//text()')[0].strip()
@@ -120,7 +114,7 @@ def Shows(sender, url):
   dir = MediaContainer(title2=sender.itemTitle)
 
   xp = '/html/body//div[contains(@class, "page all")]/div/div[@class="top"]'
-  shows = XML.ElementFromURL(url, isHTML=True, errors='ignore').xpath(xp)
+  shows = HTML.ElementFromURL(url, errors='ignore').xpath(xp)
 
   for s in shows:
     title = s.xpath('./img')[0].get('alt').strip()
@@ -137,7 +131,7 @@ def Episodes(sender, url):
   dir = MediaContainer(title2=sender.itemTitle)
 
   xp = '/html/body//div[@id="episodes"]/table/tbody/tr'
-  episodes = XML.ElementFromURL(url, isHTML=True, errors='ignore').xpath(xp)
+  episodes = HTML.ElementFromURL(url, errors='ignore').xpath(xp)
 
   for e in episodes:
     title = e.xpath('./td//span[@class="title"]')[0].text.strip()
@@ -162,7 +156,7 @@ def Episodes(sender, url):
 
     try:
       thumb_xp = '/html/head/link[@rel="image_src"]'
-      thumb = XML.ElementFromURL(url, isHTML=True, errors='ignore', cacheTime=CACHE_1MONTH).xpath(thumb_xp)[0].get('href')
+      thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath(thumb_xp)[0].get('href')
     except:
       thumb = None
 
@@ -183,17 +177,20 @@ def CalculateDuration(timecode):
 ####################################################################################################
 
 def GetThumb(url):
-  if url != None and url[0:4] == 'http':
-    data = HTTP.Request(url, cacheTime=CACHE_1MONTH)
-    if data:
-      return DataObject(data, 'image/jpeg')
+  try:
+    if url != None and url[0:4] == 'http':
+      data = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
+      if data:
+        return DataObject(data, 'image/jpeg')
+  except:
+    pass
   return Redirect(R(PLUGIN_ICON_DEFAULT))
 
 ####################################################################################################
 
 def PlayVideo(sender, url):
   xp = '/html/head/link[@rel="video_src"]'
-  video_src = XML.ElementFromURL(url, isHTML=True, errors='ignore', cacheTime=CACHE_1MONTH).xpath(xp)[0].get('href')
+  video_src = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath(xp)[0].get('href')
   vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_src)
   fileID = int(vid.group(1))
   context = int(vid.group(2))
@@ -207,8 +204,7 @@ def PlayVideo(sender, url):
     appName = content.xpath('./appName')[0].text
     streamName = content.xpath('./streamName')[0].text
     streamer = 'rtmp://' + serverName + '/' + appName
-    url = RTMP_PLAYER % (streamer, streamName)
-    return Redirect(WebVideoItem(url))
+    return Redirect(RTMPVideoItem(url=streamer, clip=streamName, height=360))
   elif url[0:4] == 'rtmp':
     (streamer, file) = url.split('/ondemand/')
     streamer += '/ondemand'
@@ -216,15 +212,14 @@ def PlayVideo(sender, url):
       file = 'mp4:' + file[:-4]
     elif file.find('.flv') != -1:
       file = file[:-4]
-    url = RTMP_PLAYER % (streamer, file)
-    return Redirect(WebVideoItem(url))
+    return Redirect(RTMPVideoItem(url=streamer, clip=file, height=360))
 
   return None
 
 ####################################################################################################
 
 def DoAmfRequest(fileID, context):
-  client = RemotingService('http://tv.adobe.com/flashservices/gateway', amf_version=3, user_agent='Shockwave Flash')
+  client = AMF.RemotingService('http://tv.adobe.com/flashservices/gateway', amf_version=3, user_agent='Shockwave Flash')
   service = client.getService('services.player')
   result = service.load(fileID, False, context)
 
