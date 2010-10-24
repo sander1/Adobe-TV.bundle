@@ -3,7 +3,6 @@
 #
 # Adobe TV (tv.adobe.com) plugin for Plex (by sander1)
 # http://wiki.plexapp.com/index.php/Adobe_TV
-#
 
 import re
 
@@ -14,7 +13,7 @@ PLUGIN_PREFIX              = '/video/adobetv'
 BASE_URL                   = 'http://tv.adobe.com'
 
 # Default artwork and icon(s)
-PLUGIN_ARTWORK             = 'art-default.png'
+PLUGIN_ARTWORK             = 'art-default.jpg'
 PLUGIN_ICON_DEFAULT        = 'icon-default.png'
 
 ###################################################################################################
