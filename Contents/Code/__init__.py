@@ -2,7 +2,6 @@
 ###################################################################################################
 #
 # Adobe TV (tv.adobe.com) plugin for Plex (by sander1)
-# v0.2 (April 18, 2010)
 # http://wiki.plexapp.com/index.php/Adobe_TV
 #
 
@@ -180,8 +179,7 @@ def GetThumb(url):
   try:
     if url != None and url[0:4] == 'http':
       data = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
-      if data:
-        return DataObject(data, 'image/jpeg')
+      return DataObject(data, 'image/jpeg')
   except:
     pass
   return Redirect(R(PLUGIN_ICON_DEFAULT))
@@ -204,7 +202,7 @@ def PlayVideo(sender, url):
     appName = content.xpath('./appName')[0].text
     streamName = content.xpath('./streamName')[0].text
     streamer = 'rtmp://' + serverName + '/' + appName
-    return Redirect(RTMPVideoItem(url=streamer, clip=streamName, height=360))
+    return Redirect(RTMPVideoItem(url=streamer, clip=streamName))
   elif url[0:4] == 'rtmp':
     (streamer, file) = url.split('/ondemand/')
     streamer += '/ondemand'
@@ -212,7 +210,7 @@ def PlayVideo(sender, url):
       file = 'mp4:' + file[:-4]
     elif file.find('.flv') != -1:
       file = file[:-4]
-    return Redirect(RTMPVideoItem(url=streamer, clip=file, height=360))
+    return Redirect(RTMPVideoItem(url=streamer, clip=file))
 
   return None
 
