@@ -11,6 +11,9 @@ BASE_URL = 'http://tv.adobe.com'
 ART      = 'art-default.jpg'
 ICON     = 'icon-default.png'
 
+PREF_MAP = {'720p':'HD', 'Medium':'MED', 'Low':'LOW'}
+ORDER = ['HD', 'MED', 'LOW']
+
 ###################################################################################################
 
 def Start():
@@ -24,7 +27,7 @@ def Start():
   MediaContainer.userAgent = ''
 
   DirectoryItem.thumb = R(ICON)
-  WebVideoItem.thumb = R(ICON)
+  VideoItem.thumb = R(ICON)
 
   HTTP.CacheTime = CACHE_1WEEK
   HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2.16) Gecko/20110319 Firefox/3.6.16'
@@ -35,6 +38,7 @@ def MainMenu():
   dir = MediaContainer(viewGroup='List')
   dir.Append(Function(DirectoryItem(Products, title='Products')))
   dir.Append(Function(DirectoryItem(Channels, title='Channels')))
+  dir.Append(PrefsItem('Preferences', thumb=R('icon-prefs.png')))
   return dir
 
 ####################################################################################################
@@ -45,7 +49,8 @@ def Products(sender):
   for product in HTML.ElementFromURL(BASE_URL + '/products/', errors='ignore').xpath('//div[@id="products"]//li/a'):
     url = BASE_URL + product.get('href')
 
-    # The ?c=l added to the url below doesn't do anything. It just makes the urls unique so we can use different cache times for the same url.
+    # The ?c=l added to the url below doesn't do anything. It just makes the urls unique so we can use different
+    # cache times for this url (long for here, 'normal' in other functions).
     details = HTML.ElementFromURL(url + '?c=l', errors='ignore', cacheTime=CACHE_1MONTH).xpath('//div[@class="masthead"]')[0]
 
     title = details.xpath('./h1')[0].text.replace('Adobe','').strip()
@@ -137,7 +142,7 @@ def Episodes(sender, url):
     except:
       thumb = None
 
-    dir.Append(Function(WebVideoItem(PlayVideo, title=title, subtitle=date, summary=summary, duration=duration, rating=rating, thumb=Function(GetThumb, url=thumb)), url=url))
+    dir.Append(Function(VideoItem(PlayVideo, title=title, subtitle=date, summary=summary, duration=duration, rating=rating, thumb=Function(GetThumb, url=thumb)), url=url))
 
   return dir
 
@@ -172,23 +177,26 @@ def PlayVideo(sender, url):
 
   url = DoAmfRequest(fileID, context)
 
-  if url.find('edgeboss') != -1:
-    content = XML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('/FLVPlayerConfig/stream/entry')[0]
-    serverName = content.xpath('./serverName')[0].text
-    appName = content.xpath('./appName')[0].text
-    streamName = content.xpath('./streamName')[0].text
-    streamer = 'rtmp://' + serverName + '/' + appName
-    return Redirect(RTMPVideoItem(url=streamer, clip=streamName))
+  if url[0:4] == 'http':
+    return Redirect(url)
   elif url[0:4] == 'rtmp':
-    (streamer, file) = url.split('/ondemand/')
-    streamer += '/ondemand'
-    if file.find('.mp4') != -1:
-      file = 'mp4:' + file[:-4]
-    elif file.find('.flv') != -1:
-      file = file[:-4]
-    return Redirect(RTMPVideoItem(url=streamer, clip=file))
-
-  return None
+    if url.find('edgeboss') != -1:
+      content = XML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('/FLVPlayerConfig/stream/entry')[0]
+      serverName = content.xpath('./serverName')[0].text
+      appName = content.xpath('./appName')[0].text
+      streamName = content.xpath('./streamName')[0].text
+      streamer = 'rtmp://' + serverName + '/' + appName
+      return Redirect(RTMPVideoItem(url=streamer, clip=streamName))
+    elif url[0:4] == 'rtmp':
+      (streamer, file) = url.split('/ondemand/')
+      streamer += '/ondemand'
+      if file.find('.mp4') != -1:
+        file = 'mp4:' + file[:-4]
+      elif file.find('.flv') != -1:
+        file = file[:-4]
+      return Redirect(RTMPVideoItem(url=streamer, clip=file))
+  else:
+    return
 
 ####################################################################################################
 
@@ -197,4 +205,32 @@ def DoAmfRequest(fileID, context):
   service = client.getService('services.player')
   result = service.load(fileID, False, context)
 
-  return result['CDNURL']
+  # If there are multiple videos to select from...
+  if 'VIDEOS' in result:
+    user_quality = Prefs['video_quality']
+    pref_value = PREF_MAP[user_quality]
+    available = {}
+
+    for version in result['VIDEOS']:
+      # Prefer http over rtmp
+      if 'PROGRESSIVE' in version:
+        video_url = version['PROGRESSIVE']
+      elif 'CDNURL' in version:
+        video_url = version['CDNURL']
+
+      q = version['QUALITY']
+      if q in ORDER:
+        available[q] = video_url
+
+    for i in range(ORDER.index(pref_value), len(ORDER)):
+      quality = ORDER[i]
+      if quality in available:
+        return available[quality]
+
+  # ...or if there is just one version available (prefer http over rtmp)
+  elif 'PROGRESSIVE' in result:
+    return result['PROGRESSIVE']
+  elif 'CDNURL' in result:
+    return result['CDNURL']
+  else:
+    return
