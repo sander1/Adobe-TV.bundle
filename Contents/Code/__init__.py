@@ -46,14 +46,14 @@ def MainMenu():
 def Products(sender):
   dir = MediaContainer(title2=sender.itemTitle)
   
-  for product in HTML.ElementFromURL(BASE_URL + '/products/', errors='ignore').xpath('//div[@id="products"]//li/a'):
-    url = BASE_URL + product.get('href')
+  for product in HTML.ElementFromURL(BASE_URL + '/products/', errors='ignore').xpath('//div[@id="products"]//li'):
+    title = product.xpath('./a/text()')[0].strip()
+    url = BASE_URL + product.xpath('./a')[0].get('href')
 
     # The ?c=l added to the url below doesn't do anything. It just makes the urls unique so we can use different
     # cache times for this url (long for here, 'normal' in other functions).
     details = HTML.ElementFromURL(url + '?c=l', errors='ignore', cacheTime=CACHE_1MONTH).xpath('//div[@class="masthead"]')[0]
 
-    title = details.xpath('./h1')[0].text.replace('Adobe','').strip()
     summary = details.xpath('./h2')[0].text
     thumb = details.xpath('./img')[0].get('src')
     dir.Append(Function(DirectoryItem(Shows, title=title, summary=summary, thumb=Function(GetThumb, url=thumb)), url=url))
@@ -105,7 +105,10 @@ def Shows(sender, url):
     url = BASE_URL + show.xpath('./h3/a')[0].get('href')
     dir.Append(Function(DirectoryItem(Episodes, title=title, summary=summary, thumb=Function(GetThumb, url=thumb)), url=url))
 
-  return dir
+  if len(dir) == 0:
+    return MessageContainer("Empty", "There aren't any items")
+  else:
+    return dir
 
 ####################################################################################################
 
@@ -144,7 +147,10 @@ def Episodes(sender, url):
 
     dir.Append(Function(VideoItem(PlayVideo, title=title, subtitle=date, summary=summary, duration=duration, rating=rating, thumb=Function(GetThumb, url=thumb)), url=url))
 
-  return dir
+  if len(dir) == 0:
+    return MessageContainer("Empty", "There aren't any items")
+  else:
+    return dir
 
 ####################################################################################################
 
