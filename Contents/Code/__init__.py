@@ -140,12 +140,7 @@ def Episodes(sender, url):
 
     url = BASE_URL + episode.xpath('./td/a')[0].get('href')
 
-    try:
-      thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//head/link[@rel="image_src"]')[0].get('href')
-    except:
-      thumb = None
-
-    dir.Append(Function(VideoItem(PlayVideo, title=title, subtitle=date, summary=summary, duration=duration, rating=rating, thumb=Function(GetThumb, url=thumb)), url=url))
+    dir.Append(Function(VideoItem(PlayVideo, title=title, subtitle=date, summary=summary, duration=duration, rating=rating, thumb=Function(GetEpisodeThumb, url=url)), url=url))
 
   if len(dir) == 0:
     return MessageContainer("Empty", "There aren't any items")
@@ -172,6 +167,15 @@ def GetThumb(url):
   except:
     pass
   return Redirect(R(ICON))
+
+####################################################################################################
+
+def GetEpisodeThumb(url):
+  try:
+    thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//head/link[@rel="image_src"]')[0].get('href')
+  except:
+    thumb = None
+  return GetThumb(thumb)
 
 ####################################################################################################
 
