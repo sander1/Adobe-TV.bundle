@@ -17,7 +17,7 @@ def MetadataObjectForURL(url):
   try:
     rating = html.xpath('//div[@class="rating"]//span[@style][1]')[0].get('style')
     rating = re.search('width.+?([0-9]+)%', rating).group(1)
-    rating = float(rating)/20
+    rating = float(rating)/10
   except:
     rating = None
 
