@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 ###################################################################################################
-#
 # Adobe TV (tv.adobe.com) plugin for Plex (by sander1)
 # http://wiki.plexapp.com/index.php/Adobe_TV
 
@@ -11,41 +10,34 @@ BASE_URL = 'http://tv.adobe.com'
 ART      = 'art-default.jpg'
 ICON     = 'icon-default.png'
 
-PREF_MAP = {'720p':'HD', 'Medium':'MED', 'Low':'LOW'}
-ORDER = ['HD', 'MED', 'LOW']
-
 ###################################################################################################
-
 def Start():
   Plugin.AddPrefixHandler('/video/adobetv', MainMenu, TITLE, ICON, ART)
   Plugin.AddViewGroup('List', viewMode='List', mediaType='items')
   Plugin.AddViewGroup('InfoList', viewMode='InfoList', mediaType='items')
 
-  MediaContainer.title1    = TITLE
-  MediaContainer.viewGroup = 'InfoList'
-  MediaContainer.art       = R(ART)
-  MediaContainer.userAgent = ''
+  ObjectContainer.title1 = TITLE
+  ObjectContainer.art = R(ART)
+  ObjectContainer.user_agent = ''
 
-  DirectoryItem.thumb = R(ICON)
-  VideoItem.thumb = R(ICON)
+  DirectoryObject.thumb = R(ICON)
+  VideoClipObject.thumb = R(ICON)
 
   HTTP.CacheTime = CACHE_1WEEK
   HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2.16) Gecko/20110319 Firefox/3.6.16'
 
 ###################################################################################################
-
 def MainMenu():
-  dir = MediaContainer(viewGroup='List')
-  dir.Append(Function(DirectoryItem(Products, title='Products')))
-  dir.Append(Function(DirectoryItem(Channels, title='Channels')))
-  dir.Append(PrefsItem('Preferences', thumb=R('icon-prefs.png')))
-  return dir
+  oc = ObjectContainer(view_group='List')
+  oc.add(DirectoryObject(key=Callback(Products, title='Products'), title='Products'))
+  oc.add(DirectoryObject(key=Callback(Channels, title='Channels'), title='Channels'))
+  oc.add(PrefsObject(title='Preferences', thumb=R('icon-prefs.png')))
+  return oc
 
 ####################################################################################################
+def Products(title):
+  oc = ObjectContainer(title2=title, view_group='InfoList')
 
-def Products(sender):
-  dir = MediaContainer(title2=sender.itemTitle)
-  
   for product in HTML.ElementFromURL(BASE_URL + '/products/', errors='ignore').xpath('//div[@id="products"]//li'):
     title = product.xpath('./a/text()')[0].strip()
     url = BASE_URL + product.xpath('./a')[0].get('href')
@@ -55,15 +47,16 @@ def Products(sender):
     details = HTML.ElementFromURL(url + '?c=l', errors='ignore', cacheTime=CACHE_1MONTH).xpath('//div[@class="masthead"]')[0]
 
     summary = details.xpath('./h2')[0].text
+    if not summary:
+      summary = ''
     thumb = details.xpath('./img')[0].get('src')
-    dir.Append(Function(DirectoryItem(Shows, title=title, summary=summary, thumb=Function(GetThumb, url=thumb)), url=url))
+    oc.add(DirectoryObject(key=Callback(Shows, title=title, url=url), title=title, summary=summary, thumb=Callback(GetThumb, url=thumb)))
 
-  return dir
+  return oc
 
 ####################################################################################################
-
-def Channels(sender):
-  dir = MediaContainer(viewGroup='List', title2=sender.itemTitle)
+def Channels(title):
+  oc = ObjectContainer(title2=title, view_group='List')
   i = 0
 
   for channel in HTML.ElementFromURL(BASE_URL + '/channels/', errors='ignore').xpath('//div[@id="channels"]//div[@class="channel"]'):
@@ -71,49 +64,47 @@ def Channels(sender):
 
     # If a channel has subchannels we get an extra menu
     if len( channel.xpath('./ul/li/a') ) > 0:
-      dir.Append(Function(DirectoryItem(SubChannels, title=title), i=i))
+      oc.add(DirectoryObject(key=Callback(SubChannels, title=title, i=i), title=title))
     else:
       url = BASE_URL + channel.xpath('./h3/a')[0].get('href')
-      dir.Append(Function(DirectoryItem(Shows, title=title), url=url))
+      oc.add(DirectoryObject(key=Callback(Shows, title=title, url=url), title=title))
 
     i += 1
 
-  return dir
+  return oc
 
 ####################################################################################################
-
-def SubChannels(sender, i):
-  dir = MediaContainer(viewGroup='List', title2=sender.itemTitle)
+def SubChannels(title, i):
+  oc = ObjectContainer(title2=title, view_group='List')
 
   channels = HTML.ElementFromURL(BASE_URL + '/channels/', errors='ignore').xpath('//div[@id="channels"]//div[@class="channel"]')
   for subchannel in channels[i].xpath('./ul/li/a'):
     title = subchannel.text.strip()
     url = BASE_URL + subchannel.get('href')
-    dir.Append(Function(DirectoryItem(Shows, title=title), url=url))
+    oc.add(DirectoryObject(key=Callback(Shows, title=title, url=url), title=title))
 
-  return dir
+  return oc
 
 ####################################################################################################
-
-def Shows(sender, url):
-  dir = MediaContainer(title2=sender.itemTitle)
+def Shows(title, url):
+  oc = ObjectContainer(title2=title, view_group='InfoList')
 
   for show in HTML.ElementFromURL(url, errors='ignore').xpath('//div[contains(@class, "page all")]/div/div[@class="top"]'):
     title = show.xpath('./img')[0].get('alt').strip()
     summary = show.xpath('./p')[0].text
     thumb = show.xpath('./img')[0].get('src').replace('50.jpg','100.jpg')
     url = BASE_URL + show.xpath('./h3/a')[0].get('href')
-    dir.Append(Function(DirectoryItem(Episodes, title=title, summary=summary, thumb=Function(GetThumb, url=thumb)), url=url))
+    oc.add(DirectoryObject(key=Callback(Episodes, title=title, url=url), title=title, summary=summary, thumb=Callback(GetThumb, url=thumb)))
 
-  if len(dir) == 0:
+  if len(oc) == 0:
     return MessageContainer("Empty", "There aren't any items")
   else:
-    return dir
+    return oc
 
 ####################################################################################################
-
-def Episodes(sender, url):
-  dir = MediaContainer(title2=sender.itemTitle)
+def Episodes(title, url):
+  oc = ObjectContainer(title2=title, view_group='InfoList')
+  tagline = title
 
   for episode in HTML.ElementFromURL(url, errors='ignore').xpath('//div[@id="episodes"]/table/tbody/tr'):
     title = episode.xpath('./td//span[@class="title"]')[0].text.strip()
@@ -137,18 +128,18 @@ def Episodes(sender, url):
 
     date = episode.xpath('./td//span[@class="added"]')[0].text
     date = re.search('Added : (.+)$', date).group(1)
+    originally_available_at = Datetime.ParseDate(date).date()
 
     url = BASE_URL + episode.xpath('./td/a')[0].get('href')
 
-    dir.Append(Function(VideoItem(PlayVideo, title=title, subtitle=date, summary=summary, duration=duration, rating=rating, thumb=Function(GetEpisodeThumb, url=url)), url=url))
+    oc.add(VideoClipObject(url=url, title=title, tagline=tagline, summary=summary, duration=duration, rating=rating, originally_available_at=originally_available_at, thumb=Callback(GetEpisodeThumb, url=url)))
 
-  if len(dir) == 0:
+  if len(oc) == 0:
     return MessageContainer("Empty", "There aren't any items")
   else:
-    return dir
+    return oc
 
 ####################################################################################################
-
 def CalculateDuration(timecode):
   milliseconds = 0
   d = re.search('([0-9]{2}):([0-9]{2}):([0-9]{2})', timecode)
@@ -158,7 +149,6 @@ def CalculateDuration(timecode):
   return milliseconds
 
 ####################################################################################################
-
 def GetThumb(url):
   try:
     if url and url[0:4] == 'http':
@@ -169,78 +159,9 @@ def GetThumb(url):
   return Redirect(R(ICON))
 
 ####################################################################################################
-
 def GetEpisodeThumb(url):
   try:
     thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//head/link[@rel="image_src"]')[0].get('href')
   except:
     thumb = None
   return GetThumb(thumb)
-
-####################################################################################################
-
-def PlayVideo(sender, url):
-  video_src = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//head/link[@rel="video_src"]')[0].get('href')
-  vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_src)
-  fileID = int(vid.group(1))
-  context = int(vid.group(2))
-
-  url = DoAmfRequest(fileID, context)
-
-  if url[0:4] == 'http':
-    return Redirect(url)
-  elif url[0:4] == 'rtmp':
-    if url.find('edgeboss') != -1:
-      content = XML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('/FLVPlayerConfig/stream/entry')[0]
-      serverName = content.xpath('./serverName')[0].text
-      appName = content.xpath('./appName')[0].text
-      streamName = content.xpath('./streamName')[0].text
-      streamer = 'rtmp://' + serverName + '/' + appName
-      return Redirect(RTMPVideoItem(url=streamer, clip=streamName))
-    elif url[0:4] == 'rtmp':
-      (streamer, file) = url.split('/ondemand/')
-      streamer += '/ondemand'
-      if file.find('.mp4') != -1:
-        file = 'mp4:' + file[:-4]
-      elif file.find('.flv') != -1:
-        file = file[:-4]
-      return Redirect(RTMPVideoItem(url=streamer, clip=file))
-  else:
-    return
-
-####################################################################################################
-
-def DoAmfRequest(fileID, context):
-  client = AMF.RemotingService('http://tv.adobe.com/flashservices/gateway', amf_version=3, user_agent='Shockwave Flash')
-  service = client.getService('services.player')
-  result = service.load(fileID, False, context)
-
-  # If there are multiple videos to select from...
-  if 'VIDEOS' in result:
-    user_quality = Prefs['video_quality']
-    pref_value = PREF_MAP[user_quality]
-    available = {}
-
-    for version in result['VIDEOS']:
-      # Prefer http over rtmp
-      if 'PROGRESSIVE' in version:
-        video_url = version['PROGRESSIVE']
-      elif 'CDNURL' in version:
-        video_url = version['CDNURL']
-
-      q = version['QUALITY']
-      if q in ORDER:
-        available[q] = video_url
-
-    for i in range(ORDER.index(pref_value), len(ORDER)):
-      quality = ORDER[i]
-      if quality in available:
-        return available[quality]
-
-  # ...or if there is just one version available (prefer http over rtmp)
-  elif 'PROGRESSIVE' in result:
-    return result['PROGRESSIVE']
-  elif 'CDNURL' in result:
-    return result['CDNURL']
-  else:
-    return

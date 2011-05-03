@@ -43,12 +43,12 @@
 		<key>Adobe TV</key>
 		<dict>
 			<key>URLPattern</key>
-			<string>http://tv.adobe.com/watch/.*</string>
+			<string>http://tv\.adobe\.com/watch/.*</string>
 			<key>LinkedPlugin</key>
 			<string>com.plexapp.plugins.adobetv</string>
 		</dict>
 	</dict>
 	<key>PlexPluginConsoleLogging</key>
-	<string>0</string>
+	<string>1</string>
 </dict>
 </plist>
