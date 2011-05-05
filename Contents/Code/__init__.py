@@ -147,7 +147,7 @@ def Episodes(sender, url):
       rating = episode.xpath('./td//span[@class="rating-stars"]/span')[0].get('style')
       rating = re.search('width:([0-9]+)%', rating).group(1)
       if int(rating) > 0:
-        rating = int(rating) / 10
+        rating = float(rating) / 10
       else:
         rating = None
     except:
