@@ -198,10 +198,20 @@ def GetEpisodeThumb(url):
 ####################################################################################################
 
 def PlayVideo(sender, url):
-  video_src = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//head/link[@rel="video_src"]')[0].get('href')
-  vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_src)
-  fileID = int(vid.group(1))
-  context = int(vid.group(2))
+  video_page = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
+
+  try:
+    video_src = HTML.ElementFromString(video_page).xpath('//head/link[@rel="video_src"]')[0].get('href')
+    vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_src)
+    fileID = int(vid.group(1))
+    context = int(vid.group(2))
+  except:
+    try:
+      vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_page)
+      fileID = int(vid.group(1))
+      context = int(vid.group(2))
+    except:
+      return None
 
   url = DoAmfRequest(fileID, context)
 
