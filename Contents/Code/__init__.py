@@ -45,18 +45,36 @@ def MainMenu():
 
 def Products(sender):
   dir = MediaContainer(title2=sender.itemTitle)
-  
-  for product in HTML.ElementFromURL(BASE_URL + '/products/', errors='ignore').xpath('//div[@id="products"]//li'):
-    title = product.xpath('./a/text()')[0].strip()
-    url = BASE_URL + product.xpath('./a')[0].get('href')
+  resultDict = {}
 
-    # The ?c=l added to the url below doesn't do anything. It just makes the urls unique so we can use different
-    # cache times for this url (long for here, 'normal' in other functions).
-    details = HTML.ElementFromURL(url + '?c=l', errors='ignore', cacheTime=CACHE_1MONTH).xpath('//div[@class="masthead"]')[0]
+  @parallelize
+  def GetProducts():
+    products = HTML.ElementFromURL(BASE_URL + '/products/', errors='ignore').xpath('//div[@id="products"]//li')
 
-    summary = details.xpath('./h2')[0].text
-    thumb = details.xpath('./img')[0].get('src')
-    dir.Append(Function(DirectoryItem(Shows, title=title, summary=summary, thumb=Function(GetThumb, url=thumb)), url=url))
+    for num in range(len(products)):
+      product = products[num]
+
+      @task
+      def GetProduct(num=num, resultDict=resultDict, product=product):
+        title = product.xpath('./a/text()')[0].strip()
+        url = BASE_URL + product.xpath('./a')[0].get('href')
+
+        # The ?c=l added to the url below doesn't do anything. It just makes the urls unique so we can use different
+        # cache times for this url (long for here, 'normal' in other functions).
+        details = HTML.ElementFromURL(url + '?c=l', errors='ignore', cacheTime=CACHE_1MONTH).xpath('//div[@class="masthead"]')[0]
+
+        summary = details.xpath('./h2')[0].text
+        if not summary:
+          summary = ''
+
+        thumb = details.xpath('./img')[0].get('src')
+
+        resultDict[num] = DirectoryItem(Function(Shows, url=url), title=title, summary=summary, thumb=Function(GetThumb, url=thumb))
+
+  keys = resultDict.keys()
+  keys.sort()
+  for key in keys:
+    dir.Append(resultDict[key])
 
   return dir
 
