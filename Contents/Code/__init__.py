@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-###################################################################################################
-#
-# Adobe TV (tv.adobe.com) plugin for Plex (by sander1)
-# http://wiki.plexapp.com/index.php/Adobe_TV
-
 import re
 
 TITLE    = 'Adobe TV'
@@ -15,7 +10,6 @@ PREF_MAP = {'720p':'HD', 'Medium':'MED', 'Low':'LOW'}
 ORDER = ['HD', 'MED', 'LOW']
 
 ###################################################################################################
-
 def Start():
   Plugin.AddPrefixHandler('/video/adobetv', MainMenu, TITLE, ICON, ART)
   Plugin.AddViewGroup('List', viewMode='List', mediaType='items')
@@ -30,10 +24,9 @@ def Start():
   VideoItem.thumb = R(ICON)
 
   HTTP.CacheTime = CACHE_1WEEK
-  HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2.16) Gecko/20110319 Firefox/3.6.16'
+  HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.7; rv:7.0.1) Gecko/20100101 Firefox/7.0.1'
 
 ###################################################################################################
-
 def MainMenu():
   dir = MediaContainer(viewGroup='List')
   dir.Append(Function(DirectoryItem(Products, title='Products')))
@@ -42,7 +35,6 @@ def MainMenu():
   return dir
 
 ####################################################################################################
-
 def Products(sender):
   dir = MediaContainer(title2=sender.itemTitle)
   resultDict = {}
@@ -79,7 +71,6 @@ def Products(sender):
   return dir
 
 ####################################################################################################
-
 def Channels(sender):
   dir = MediaContainer(viewGroup='List', title2=sender.itemTitle)
   i = 0
@@ -99,7 +90,6 @@ def Channels(sender):
   return dir
 
 ####################################################################################################
-
 def SubChannels(sender, i):
   dir = MediaContainer(viewGroup='List', title2=sender.itemTitle)
 
@@ -112,7 +102,6 @@ def SubChannels(sender, i):
   return dir
 
 ####################################################################################################
-
 def Shows(sender, url):
   dir = MediaContainer(title2=sender.itemTitle)
 
@@ -129,7 +118,6 @@ def Shows(sender, url):
     return dir
 
 ####################################################################################################
-
 def Episodes(sender, url):
   dir = MediaContainer(title2=sender.itemTitle)
 
@@ -153,8 +141,11 @@ def Episodes(sender, url):
     except:
       rating = None
 
-    date = episode.xpath('./td//span[@class="added"]')[0].text
-    date = re.search('Added : (.+)$', date).group(1)
+    try:
+      date = episode.xpath('./td//span[@class="added"]')[0].text
+      date = re.search('Added : (.+)$', date).group(1)
+    except:
+      date = None
 
     url = BASE_URL + episode.xpath('./td/a')[0].get('href')
 
@@ -166,7 +157,6 @@ def Episodes(sender, url):
     return dir
 
 ####################################################################################################
-
 def CalculateDuration(timecode):
   milliseconds = 0
   d = re.search('([0-9]{2}):([0-9]{2}):([0-9]{2})', timecode)
@@ -176,7 +166,6 @@ def CalculateDuration(timecode):
   return milliseconds
 
 ####################################################################################################
-
 def GetThumb(url):
   try:
     if url and url[0:4] == 'http':
@@ -187,7 +176,6 @@ def GetThumb(url):
   return Redirect(R(ICON))
 
 ####################################################################################################
-
 def GetEpisodeThumb(url):
   try:
     thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//head/link[@rel="image_src"]')[0].get('href')
@@ -196,7 +184,6 @@ def GetEpisodeThumb(url):
   return GetThumb(thumb)
 
 ####################################################################################################
-
 def PlayVideo(sender, url):
   video_page = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
 
@@ -214,30 +201,9 @@ def PlayVideo(sender, url):
       return None
 
   url = DoAmfRequest(fileID, context)
-
-  if url[0:4] == 'http':
-    return Redirect(url)
-  elif url[0:4] == 'rtmp':
-    if url.find('edgeboss') != -1:
-      content = XML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('/FLVPlayerConfig/stream/entry')[0]
-      serverName = content.xpath('./serverName')[0].text
-      appName = content.xpath('./appName')[0].text
-      streamName = content.xpath('./streamName')[0].text
-      streamer = 'rtmp://' + serverName + '/' + appName
-      return Redirect(RTMPVideoItem(url=streamer, clip=streamName))
-    elif url[0:4] == 'rtmp':
-      (streamer, file) = url.split('/ondemand/')
-      streamer += '/ondemand'
-      if file.find('.mp4') != -1:
-        file = 'mp4:' + file[:-4]
-      elif file.find('.flv') != -1:
-        file = file[:-4]
-      return Redirect(RTMPVideoItem(url=streamer, clip=file))
-  else:
-    return
+  return Redirect(url)
 
 ####################################################################################################
-
 def DoAmfRequest(fileID, context):
   client = AMF.RemotingService('http://tv.adobe.com/flashservices/gateway', amf_version=3, user_agent='Shockwave Flash')
   service = client.getService('services.player')
@@ -250,11 +216,8 @@ def DoAmfRequest(fileID, context):
     available = {}
 
     for version in result['VIDEOS']:
-      # Prefer http over rtmp
       if 'PROGRESSIVE' in version:
         video_url = version['PROGRESSIVE']
-      elif 'CDNURL' in version:
-        video_url = version['CDNURL']
 
       q = version['QUALITY']
       if q in ORDER:
@@ -265,10 +228,8 @@ def DoAmfRequest(fileID, context):
       if quality in available:
         return available[quality]
 
-  # ...or if there is just one version available (prefer http over rtmp)
+  # ...or if there is just one version available
   elif 'PROGRESSIVE' in result:
     return result['PROGRESSIVE']
-  elif 'CDNURL' in result:
-    return result['CDNURL']
   else:
-    return
+    return None

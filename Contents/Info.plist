@@ -17,12 +17,11 @@
 	<key>CFBundleVersion</key>
 	<string>1.0</string>
 	<key>PlexClientPlatforms</key>
-	<string>MacOSX,LGTV</string>
+	<string>MacOSX,iOS,Android,LGTV</string>
 	<key>PlexFrameworkVersion</key>
 	<string>2</string>
 	<key>PlexMediaContainer</key>
 	<array>
-		<string>Flash</string>
 		<string>MP4</string>
 		<string>FLV</string>
 	</array>
@@ -48,7 +47,5 @@
 			<string>com.plexapp.plugins.adobetv</string>
 		</dict>
 	</dict>
-	<key>PlexPluginConsoleLogging</key>
-	<string>0</string>
 </dict>
 </plist>
