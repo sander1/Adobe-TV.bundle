@@ -178,7 +178,7 @@ def GetThumb(url):
 ####################################################################################################
 def GetEpisodeThumb(url):
   try:
-    thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//head/link[@rel="image_src"]')[0].get('href')
+    thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//link[@rel="image_src"]')[0].get('href')
   except:
     thumb = None
   return GetThumb(thumb)
@@ -188,7 +188,7 @@ def PlayVideo(sender, url):
   video_page = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
 
   try:
-    video_src = HTML.ElementFromString(video_page).xpath('//head/link[@rel="video_src"]')[0].get('href')
+    video_src = HTML.ElementFromString(video_page).xpath('//link[@rel="video_src"]')[0].get('href')
     vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_src)
     fileID = int(vid.group(1))
     context = int(vid.group(2))
