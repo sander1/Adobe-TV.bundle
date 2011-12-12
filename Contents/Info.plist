@@ -30,7 +30,7 @@
 	</array>
 	<key>PlexVideoCodec</key>
 	<array>
-		<string>H264</string>
+		<string>H.264</string>
 		<string>VP6F</string>
 	</array>
 	<key>PlexPluginMode</key>
