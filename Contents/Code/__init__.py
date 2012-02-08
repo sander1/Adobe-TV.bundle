@@ -1,235 +1,197 @@
 # -*- coding: utf-8 -*-
 import re
 
-TITLE    = 'Adobe TV'
+NAME = 'Adobe TV'
 BASE_URL = 'http://tv.adobe.com'
-ART      = 'art-default.jpg'
-ICON     = 'icon-default.png'
+ART = 'art-default.jpg'
+ICON = 'icon-default.png'
 
-PREF_MAP = {'720p':'HD', 'Medium':'MED', 'Low':'LOW'}
-ORDER = ['HD', 'MED', 'LOW']
+SHOWS_BY_PRODUCT = 'http://tv.adobe.com/api/v4/Show/index/?product_id=%s&maxresults=1000'
+SHOWS_BY_CATEGORY = 'http://tv.adobe.com/api/v4/Show/index/?category_id=%s&maxresults=1000'
+EPISODES = 'http://tv.adobe.com/api/v4/Episode/index/?show_id=%s&maxresults=1000'
 
 ###################################################################################################
 def Start():
-  Plugin.AddPrefixHandler('/video/adobetv', MainMenu, TITLE, ICON, ART)
-  Plugin.AddViewGroup('List', viewMode='List', mediaType='items')
-  Plugin.AddViewGroup('InfoList', viewMode='InfoList', mediaType='items')
 
-  MediaContainer.title1    = TITLE
-  MediaContainer.viewGroup = 'InfoList'
-  MediaContainer.art       = R(ART)
-  MediaContainer.userAgent = ''
+	Plugin.AddPrefixHandler('/video/adobetv', MainMenu, NAME, ICON, ART)
+	Plugin.AddViewGroup('List', viewMode='List', mediaType='items')
+	Plugin.AddViewGroup('InfoList', viewMode='InfoList', mediaType='items')
 
-  DirectoryItem.thumb = R(ICON)
-  VideoItem.thumb = R(ICON)
+	ObjectContainer.title1 = NAME
+	ObjectContainer.view_group = 'InfoList'
+	ObjectContainer.art = R(ART)
 
-  HTTP.CacheTime = CACHE_1WEEK
-  HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.7; rv:7.0.1) Gecko/20100101 Firefox/7.0.1'
+	DirectoryObject.thumb = R(ICON)
+	VideoClipObject.thumb = R(ICON)
+
+	HTTP.CacheTime = CACHE_1DAY
+	HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) AppleWebKit/534.53.11 (KHTML, like Gecko) Version/5.1.3 Safari/534.53.10'
 
 ###################################################################################################
 def MainMenu():
-  dir = MediaContainer(viewGroup='List')
-  dir.Append(Function(DirectoryItem(Products, title='Products')))
-  dir.Append(Function(DirectoryItem(Channels, title='Channels')))
-  dir.Append(PrefsItem('Preferences', thumb=R('icon-prefs.png')))
-  return dir
+
+	oc = ObjectContainer(view_group='List')
+	oc.add(DirectoryObject(key = Callback(Channels), title='Channels'))
+	oc.add(DirectoryObject(key = Callback(Products), title='Products'))
+	return oc
 
 ####################################################################################################
-def Products(sender):
-  dir = MediaContainer(title2=sender.itemTitle)
-  resultDict = {}
+def Channels():
 
-  @parallelize
-  def GetProducts():
-    products = HTML.ElementFromURL(BASE_URL + '/products/', errors='ignore').xpath('//div[@id="products"]//li')
+	oc = ObjectContainer(title2='Channels', view_group='List')
+	i = 0
 
-    for num in range(len(products)):
-      product = products[num]
+	for channel in HTML.ElementFromURL('%s/channels/' % BASE_URL).xpath('//div[@id="channels"]//div[contains(@class, "channel")]'):
+		title = channel.xpath('./h3/a/text()')[0].strip()
 
-      @task
-      def GetProduct(num=num, resultDict=resultDict, product=product):
-        title = product.xpath('./a/text()')[0].strip()
-        url = BASE_URL + product.xpath('./a')[0].get('href')
+		# If a channel has subchannels we create an extra menu
+		if len( channel.xpath('./ul/li/a') ) > 0:
+			oc.add(DirectoryObject(key=Callback(SubChannels, title=title, i=i), title=title))
+		else:
+			url = channel.xpath('./h3/a')[0].get('href')
+			oc.add(DirectoryObject(key=Callback(Shows, title=title, url=url), title=title))
 
-        # The ?c=l added to the url below doesn't do anything. It just makes the urls unique so we can use different
-        # cache times for this url (long for here, 'normal' in other functions).
-        details = HTML.ElementFromURL(url + '?c=l', errors='ignore', cacheTime=CACHE_1MONTH).xpath('//div[@class="masthead"]')[0]
+		i += 1
 
-        summary = details.xpath('./h2')[0].text
-        if not summary:
-          summary = ''
-
-        thumb = details.xpath('./img')[0].get('src')
-
-        resultDict[num] = DirectoryItem(Function(Shows, url=url), title=title, summary=summary, thumb=Function(GetThumb, url=thumb))
-
-  keys = resultDict.keys()
-  keys.sort()
-  for key in keys:
-    dir.Append(resultDict[key])
-
-  return dir
+	return oc
 
 ####################################################################################################
-def Channels(sender):
-  dir = MediaContainer(viewGroup='List', title2=sender.itemTitle)
-  i = 0
+def SubChannels(title, i):
 
-  for channel in HTML.ElementFromURL(BASE_URL + '/channels/', errors='ignore').xpath('//div[@id="channels"]//div[@class="channel"]'):
-    title = channel.xpath('./h3//text()')[0].strip()
+	oc = ObjectContainer(title2=title, view_group='List')
+	channels = HTML.ElementFromURL('%s/channels/' % BASE_URL).xpath('//div[@id="channels"]//div[contains(@class, "channel")]')
 
-    # If a channel has subchannels we get an extra menu
-    if len( channel.xpath('./ul/li/a') ) > 0:
-      dir.Append(Function(DirectoryItem(SubChannels, title=title), i=i))
-    else:
-      url = BASE_URL + channel.xpath('./h3/a')[0].get('href')
-      dir.Append(Function(DirectoryItem(Shows, title=title), url=url))
+	for subchannel in channels[i].xpath('./ul/li/a'):
+		title = subchannel.text.strip()
+		url = subchannel.get('href')
+		oc.add(DirectoryObject(key=Callback(Shows, title=title, url=url), title=title))
 
-    i += 1
-
-  return dir
+	return oc
 
 ####################################################################################################
-def SubChannels(sender, i):
-  dir = MediaContainer(viewGroup='List', title2=sender.itemTitle)
+def Products():
 
-  channels = HTML.ElementFromURL(BASE_URL + '/channels/', errors='ignore').xpath('//div[@id="channels"]//div[@class="channel"]')
-  for subchannel in channels[i].xpath('./ul/li/a'):
-    title = subchannel.text.strip()
-    url = BASE_URL + subchannel.get('href')
-    dir.Append(Function(DirectoryItem(Shows, title=title), url=url))
+	oc = ObjectContainer(title2='Products')
+	json = GetJson('%s/products/' % BASE_URL)
 
-  return dir
+	if json:
+		for product in json['products']['en']:
+			product_id = str( product['id'] )
+			title = product['product_name']
+			summary = product['product_description']
+			thumb = product['large_logo']['url']
 
-####################################################################################################
-def Shows(sender, url):
-  dir = MediaContainer(title2=sender.itemTitle)
+			if thumb.startswith('//'):
+				thumb = 'http:%s' % thumb
 
-  for show in HTML.ElementFromURL(url, errors='ignore').xpath('//div[contains(@class, "page all")]/div/div[@class="top"]'):
-    title = show.xpath('./img')[0].get('alt').strip()
-    summary = show.xpath('./p')[0].text
-    thumb = show.xpath('./img')[0].get('src').replace('50.jpg','100.jpg')
-    url = BASE_URL + show.xpath('./h3/a')[0].get('href')
-    dir.Append(Function(DirectoryItem(Episodes, title=title, summary=summary, thumb=Function(GetThumb, url=thumb)), url=url))
+			oc.add(DirectoryObject(key=Callback(Shows, title=title, product_id=product_id), title=title, summary=summary, thumb=Callback(GetThumb, url=thumb)))
 
-  if len(dir) == 0:
-    return MessageContainer("Empty", "There aren't any items")
-  else:
-    return dir
+	return oc
 
 ####################################################################################################
-def Episodes(sender, url):
-  dir = MediaContainer(title2=sender.itemTitle)
+def Shows(title, product_id=None, url=None):
 
-  for episode in HTML.ElementFromURL(url, errors='ignore').xpath('//div[@id="episodes"]/table/tbody/tr'):
-    title = episode.xpath('./td//span[@class="title"]')[0].text.strip()
-    summary = episode.xpath('./td//span[@class="description"]')[0].text
+	oc = ObjectContainer(title2=title)
+	show_url = None
 
-    try:
-      duration = episode.xpath('./td//span[@class="runtime"]')[0].text
-      duration = CalculateDuration(duration)
-    except:
-      duration = None
+	if product_id:
+		show_url = SHOWS_BY_PRODUCT % product_id
+	elif url:
+		# Find the category id
+		page = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
+		category = re.search('"categories":\[.+?' + title + '","id":([0-9]+),', page)
 
-    try:
-      rating = episode.xpath('./td//span[@class="rating-stars"]/span')[0].get('style')
-      rating = re.search('width:([0-9]+)%', rating).group(1)
-      if int(rating) > 0:
-        rating = float(rating) / 10
-      else:
-        rating = None
-    except:
-      rating = None
+		if category:
+			category_id = category.group(1)
+			Log('%s: %s' % (title, category_id))
+			show_url = SHOWS_BY_CATEGORY % category_id
 
-    try:
-      date = episode.xpath('./td//span[@class="added"]')[0].text
-      date = re.search('Added : (.+)$', date).group(1)
-    except:
-      date = None
+	if show_url:
+		for show in JSON.ObjectFromURL(show_url)['data']:
+			show_id = str( show['id'] )
+			title = show['show_name']
+			summary = show['show_description']
+			thumb = show['large_logo']['url']
 
-    url = BASE_URL + episode.xpath('./td/a')[0].get('href')
+			oc.add(DirectoryObject(key=Callback(Episodes, title=title, show_id=show_id), title=title, summary=summary, thumb=Callback(GetThumb, url=thumb)))
 
-    dir.Append(Function(VideoItem(PlayVideo, title=title, subtitle=date, summary=summary, duration=duration, rating=rating, thumb=Function(GetEpisodeThumb, url=url)), url=url))
-
-  if len(dir) == 0:
-    return MessageContainer("Empty", "There aren't any items")
-  else:
-    return dir
+	if len(oc) == 0:
+		return MessageContainer("Empty", "There aren't any shows for this product or channel")
+	else:
+		return oc
 
 ####################################################################################################
-def CalculateDuration(timecode):
-  milliseconds = 0
-  d = re.search('([0-9]{2}):([0-9]{2}):([0-9]{2})', timecode)
-  milliseconds += int( d.group(1) ) * 60 * 60 * 1000
-  milliseconds += int( d.group(2) ) * 60 * 1000
-  milliseconds += int( d.group(3) ) * 1000
-  return milliseconds
+def Episodes(title, show_id):
+
+	oc = ObjectContainer(title2=title)
+
+	for episode in JSON.ObjectFromURL(EPISODES % show_id)['data']:
+		video = VideoClipObject()
+
+		video.url = episode['url']
+		video.title = episode['title']
+		video.summary = episode['description']
+		video.thumb = episode['thumbnail']
+
+		if 'rating_cache' in episode:
+			video.rating = episode['rating_cache'] * 2
+
+		if 'duration' in episode:
+			video.duration = TimeToMs(episode['duration'])
+
+		oc.add(video)
+
+	if len(oc) == 0:
+		return MessageContainer("Empty", "There aren't episodes for this show")
+	else:
+		return oc
 
 ####################################################################################################
 def GetThumb(url):
-  try:
-    if url and url[0:4] == 'http':
-      data = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
-      return DataObject(data, 'image/jpeg')
-  except:
-    pass
-  return Redirect(R(ICON))
+
+	try:
+		if url and url[0:4] == 'http':
+			if url.endswith('.png'):
+				mimetype = 'image/png'
+			else:
+				mimetype = 'image/jpeg'
+
+			data = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
+			return DataObject(data, mimetype)
+	except:
+		pass
+
+	return Redirect(R(ICON))
 
 ####################################################################################################
-def GetEpisodeThumb(url):
-  try:
-    thumb = HTML.ElementFromURL(url, errors='ignore', cacheTime=CACHE_1MONTH).xpath('//link[@rel="image_src"]')[0].get('href')
-  except:
-    thumb = None
-  return GetThumb(thumb)
+def GetJson(url):
+
+	html = HTTP.Request(url).content
+
+	# Extract the relevant JSON part
+	pattern = re.compile('data\s:\s(\{.+\})')
+	result = pattern.search(html)
+
+	if result:
+		json_string = result.group(1).replace("\\\\/", "/").replace("\\/", "/").replace('\\"', '"').replace('"[', '[').replace(']"', ']').replace("'client_JSON'", '"client_JSON"')
+		json = JSON.ObjectFromString(json_string)['client_JSON']
+
+		return json
+	else:
+		return None
 
 ####################################################################################################
-def PlayVideo(sender, url):
-  video_page = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
+def TimeToMs(timecode):
 
-  try:
-    video_src = HTML.ElementFromString(video_page).xpath('//link[@rel="video_src"]')[0].get('href')
-    vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_src)
-    fileID = int(vid.group(1))
-    context = int(vid.group(2))
-  except:
-    try:
-      vid = re.search('fileID=([0-9]+).+context=([0-9]+)', video_page)
-      fileID = int(vid.group(1))
-      context = int(vid.group(2))
-    except:
-      return None
+	seconds = 0
 
-  url = DoAmfRequest(fileID, context)
-  return Redirect(url)
+	try:
+		duration = timecode.split(':')
+		duration.reverse()
 
-####################################################################################################
-def DoAmfRequest(fileID, context):
-  client = AMF.RemotingService('http://tv.adobe.com/flashservices/gateway', amf_version=3, user_agent='Shockwave Flash')
-  service = client.getService('services.player')
-  result = service.load(fileID, False, context)
+		for i in range(0, len(duration)):
+			seconds += int(duration[i]) * (60**i)
+	except:
+		pass
 
-  # If there are multiple videos to select from...
-  if 'VIDEOS' in result:
-    user_quality = Prefs['video_quality']
-    pref_value = PREF_MAP[user_quality]
-    available = {}
-
-    for version in result['VIDEOS']:
-      if 'PROGRESSIVE' in version:
-        video_url = version['PROGRESSIVE']
-
-      q = version['QUALITY']
-      if q in ORDER:
-        available[q] = video_url
-
-    for i in range(ORDER.index(pref_value), len(ORDER)):
-      quality = ORDER[i]
-      if quality in available:
-        return available[quality]
-
-  # ...or if there is just one version available
-  elif 'PROGRESSIVE' in result:
-    return result['PROGRESSIVE']
-  else:
-    return None
+	return seconds * 1000
