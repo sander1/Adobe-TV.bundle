@@ -44,12 +44,14 @@ def Channels():
 	for channel in HTML.ElementFromURL('%s/channels/' % BASE_URL).xpath('//div[@id="channels"]//div[contains(@class, "channel")]'):
 		title = channel.xpath('./h3/a/text()')[0].strip()
 
-		# If a channel has subchannels we create an extra menu
-		if len( channel.xpath('./ul/li/a') ) > 0:
-			oc.add(DirectoryObject(key=Callback(SubChannels, title=title, i=i), title=title))
-		else:
-			url = channel.xpath('./h3/a')[0].get('href')
-			oc.add(DirectoryObject(key=Callback(Shows, title=title, url=url), title=title))
+		if title not in ['All Shows']:
+
+			# If a channel has subchannels we create an extra menu
+			if len( channel.xpath('./ul/li/a') ) > 0:
+				oc.add(DirectoryObject(key=Callback(SubChannels, title=title, i=i), title=title))
+			else:
+				url = channel.xpath('./h3/a')[0].get('href')
+				oc.add(DirectoryObject(key=Callback(Shows, title=title, url=url), title=title))
 
 		i += 1
 
@@ -92,32 +94,45 @@ def Products():
 def Shows(title, product_id=None, url=None):
 
 	oc = ObjectContainer(title2=title)
-	show_url = None
+	show_urls = []
+	show_ids = []
 
 	if product_id:
-		show_url = SHOWS_BY_PRODUCT % product_id
+		show_urls.append(SHOWS_BY_PRODUCT % product_id)
 	elif url:
-		# Find the category id
-		page = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
-		category = re.search('"categories":\[.+?' + title + '","id":([0-9]+),', page)
+		# Find category id(s)
+		page = HTTP.Request(url).content
+		category = re.search('"categories":\[(.+?"category_name":"' + title + '".+?\])', page)
 
 		if category:
-			category_id = category.group(1)
-			Log('%s: %s' % (title, category_id))
-			show_url = SHOWS_BY_CATEGORY % category_id
+			category_id = re.search('"id":([0-9]+)', category.group(1)).group(1)
+			show_urls.append(SHOWS_BY_CATEGORY % category_id)
+		else:
+			categories = re.search('"categories":\[{"category_name"(.+?)\]', page)
 
-	if show_url:
+			if categories:
+				category_ids = re.findall('"id":([0-9]+)', categories.group(1))
+
+				if category_ids:
+					for category_id in category_ids:
+						show_urls.append(SHOWS_BY_CATEGORY % category_id)
+
+	for show_url in show_urls:
 		for show in JSON.ObjectFromURL(show_url)['data']:
 			show_id = str( show['id'] )
-			title = show['show_name']
-			summary = show['show_description']
-			thumb = show['large_logo']['url']
 
-			oc.add(DirectoryObject(key=Callback(Episodes, title=title, show_id=show_id), title=title, summary=summary, thumb=Callback(GetThumb, url=thumb)))
+			if show_id not in show_ids:
+				title = show['show_name']
+				summary = show['show_description']
+				thumb = show['large_logo']['url']
+
+				oc.add(DirectoryObject(key=Callback(Episodes, title=title, show_id=show_id), title=title, summary=summary, thumb=Callback(GetThumb, url=thumb)))
+				show_ids.append(show_id)
 
 	if len(oc) == 0:
 		return MessageContainer("Empty", "There aren't any shows for this product or channel")
 	else:
+		oc.objects.sort(key = lambda obj: obj.title)
 		return oc
 
 ####################################################################################################
